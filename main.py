@@ -1,158 +1,137 @@
+import sqlite3
 from datetime import datetime
 
-# Base User class
-class User:
-    def __init__(self, user_id, name, email, password):
-        self.user_id = user_id
-        self.name = name
-        self.email = email
-        self.password = password
+# Database Manager
+class DatabaseManager:
+    def __init__(self, db_name="workplace_harassment.db"):
+        self.conn = sqlite3.connect(db_name)
+        self.cursor = self.conn.cursor()
+        self.create_tables()
 
-    def login(self):
-        print(f"{self.name} logged in")
+    def create_tables(self):
+        """Create tables if they don't exist."""
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                userID INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('Employee', 'HRPersonnel', 'Admin'))
+            )
+        ''')
 
-    def logout(self):
-        print(f"{self.name} logged out")
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS cases (
+                caseID INTEGER PRIMARY KEY AUTOINCREMENT,
+                reporterID INTEGER,
+                assignedHRID INTEGER,
+                description TEXT NOT NULL,
+                status TEXT CHECK(status IN ('Pending', 'In Review', 'Resolved')) DEFAULT 'Pending',
+                createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(reporterID) REFERENCES users(userID),
+                FOREIGN KEY(assignedHRID) REFERENCES users(userID)
+            )
+        ''')
+        self.conn.commit()
 
-# Employee class (inherits from User)
-class Employee(User):
-    def report_harassment(self, description):
-        new_case = Case(case_id=len(Case.cases) + 1, reporter=self, description=description)
-        Case.cases.append(new_case)
-        print(f"Harassment case reported by {self.name}")
-        return new_case
+    def add_user(self, name, email, password, role):
+        """Register a new user."""
+        try:
+            self.cursor.execute("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
+                                (name, email, password, role))
+            self.conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False  # Email already exists
 
-    def view_case_status(self, case_id):
-        for case in Case.cases:
-            if case.case_id == case_id and case.reporter == self:
-                return case.status
-        return "Case not found"
+    def authenticate_user(self, email, password):
+        """Authenticate a user."""
+        self.cursor.execute("SELECT * FROM users WHERE email = ? AND password = ?", (email, password))
+        return self.cursor.fetchone()  # Returns user record or None
 
-# HRPersonnel class (inherits from User)
-class HRPersonnel(User):
-    def review_case(self, case_id):
-        case = self._find_case(case_id)
-        if case:
-            print(f"HR {self.name} is reviewing case {case_id}")
-    
-    def resolve_case(self, case_id, resolution):
-        case = self._find_case(case_id)
-        if case:
-            case.status = "Resolved"
-            print(f"Case {case_id} resolved with resolution: {resolution}")
+    def report_case(self, reporter_id, description):
+        """Employee reports a harassment case."""
+        self.cursor.execute("INSERT INTO cases (reporterID, description) VALUES (?, ?)", (reporter_id, description))
+        self.conn.commit()
+        return self.cursor.lastrowid  # Return the case ID
 
-    def communicate_with_employee(self, employee_id, message):
-        print(f"HR {self.name} sent a message to Employee {employee_id}: {message}")
+    def fetch_cases(self, role, user_id=None):
+        """Fetch cases based on role."""
+        if role == "HRPersonnel":
+            self.cursor.execute("SELECT * FROM cases WHERE status != 'Resolved'")
+        elif role == "Employee":
+            self.cursor.execute("SELECT * FROM cases WHERE reporterID = ?", (user_id,))
+        else:  # Admin gets all cases
+            self.cursor.execute("SELECT * FROM cases")
+        return self.cursor.fetchall()
 
-    def _find_case(self, case_id):
-        for case in Case.cases:
-            if case.case_id == case_id and case.assigned_hr == self:
-                return case
-        return None
-
-# Admin class (inherits from User)
-class Admin(User):
-    def oversee_cases(self):
-        return [case for case in Case.cases]
-
-    def ensure_compliance(self):
-        print("Admin is ensuring compliance with workplace policies")
-
-# Case class to handle reported cases
-class Case:
-    cases = []
-
-    def __init__(self, case_id, reporter, description):
-        self.case_id = case_id
-        self.reporter = reporter
-        self.assigned_hr = None  # Will be assigned later
-        self.description = description
-        self.status = "Pending"
-        self.created_at = datetime.now()
-
-    def update_status(self, new_status):
-        self.status = new_status
+    def update_case_status(self, case_id, new_status, hr_id):
+        """HR updates the case status."""
+        self.cursor.execute("UPDATE cases SET status = ?, assignedHRID = ? WHERE caseID = ?", (new_status, hr_id, case_id))
+        self.conn.commit()
 
 # Authentication System
 class AuthenticationSystem:
-    users = {}
+    def __init__(self, db):
+        self.db = db
 
-    @staticmethod
-    def authenticate_user(email, password):
-        user = AuthenticationSystem.users.get(email)
-        if user and user.password == password:
-            print(f"Authentication successful for {user.name}")
+    def login(self, email, password):
+        user = self.db.authenticate_user(email, password)
+        if user:
+            print(f"Welcome, {user[1]} ({user[4]})!")
             return user
         else:
-            print("Authentication failed")
+            print("Invalid credentials.")
             return None
 
-    @staticmethod
-    def logout_user(user):
-        print(f"{user.name} has logged out")
-
-# Interactive CLI Application
-def main():
-    # Sample users
-    emp = Employee(1, "Alice", "alice@example.com", "password123")
-    hr = HRPersonnel(2, "Bob", "bob@example.com", "password456")
-    admin = Admin(3, "Charlie", "charlie@example.com", "adminpass")
-    
-    AuthenticationSystem.users[emp.email] = emp
-    AuthenticationSystem.users[hr.email] = hr
-    AuthenticationSystem.users[admin.email] = admin
-
-    while True:
-        email = input("Enter email: ")
-        password = input("Enter password: ")
-        user = AuthenticationSystem.authenticate_user(email, password)
-        if user:
-            while True:
-                if isinstance(user, Employee):
-                    print("1. Report Harassment")
-                    print("2. View Case Status")
-                    print("3. Logout")
-                    choice = input("Choose an option: ")
-                    if choice == "1":
-                        desc = input("Enter case description: ")
-                        user.report_harassment(desc)
-                    elif choice == "2":
-                        case_id = int(input("Enter case ID: "))
-                        print("Case Status:", user.view_case_status(case_id))
-                    elif choice == "3":
-                        AuthenticationSystem.logout_user(user)
-                        break
-                elif isinstance(user, HRPersonnel):
-                    print("1. Review Case")
-                    print("2. Resolve Case")
-                    print("3. Logout")
-                    choice = input("Choose an option: ")
-                    if choice == "1":
-                        case_id = int(input("Enter case ID: "))
-                        user.review_case(case_id)
-                    elif choice == "2":
-                        case_id = int(input("Enter case ID: "))
-                        resolution = input("Enter resolution: ")
-                        user.resolve_case(case_id, resolution)
-                    elif choice == "3":
-                        AuthenticationSystem.logout_user(user)
-                        break
-                elif isinstance(user, Admin):
-                    print("1. Oversee Cases")
-                    print("2. Ensure Compliance")
-                    print("3. Logout")
-                    choice = input("Choose an option: ")
-                    if choice == "1":
-                        cases = user.oversee_cases()
-                        for case in cases:
-                            print(f"Case {case.case_id}: {case.description} - Status: {case.status}")
-                    elif choice == "2":
-                        user.ensure_compliance()
-                    elif choice == "3":
-                        AuthenticationSystem.logout_user(user)
-                        break
-        else:
-            print("Invalid credentials, try again!")
-
+# Main Execution
 if __name__ == "__main__":
-    main()
+    db = DatabaseManager()
+    auth_system = AuthenticationSystem(db)
+
+    # Sample Data (For Testing)
+    if not db.authenticate_user("employee@example.com", "1234"):
+        db.add_user("Alice", "employee@example.com", "1234", "Employee")
+    if not db.authenticate_user("hr@example.com", "admin"):
+        db.add_user("Bob", "hr@example.com", "admin", "HRPersonnel")
+    if not db.authenticate_user("admin@example.com", "admin"):
+        db.add_user("Charlie", "admin@example.com", "admin", "Admin")
+
+    # Interactive CLI
+    user = None
+    while not user:
+        email = input("Enter your email: ")
+        password = input("Enter your password: ")
+        user = auth_system.login(email, password)
+
+    role = user[4]  # Extract user role
+
+    if role == "Employee":
+        print("\n1. Report a Harassment Case\n2. View My Cases")
+        choice = input("Enter your choice: ")
+        if choice == "1":
+            description = input("Enter case description: ")
+            case_id = db.report_case(user[0], description)
+            print(f"Case #{case_id} reported successfully.")
+        elif choice == "2":
+            cases = db.fetch_cases("Employee", user[0])
+            print("Your Cases:", cases)
+
+    elif role == "HRPersonnel":
+        print("\n1. View Cases\n2. Update Case Status")
+        choice = input("Enter your choice: ")
+        if choice == "1":
+            cases = db.fetch_cases("HRPersonnel")
+            print("Pending Cases:", cases)
+        elif choice == "2":
+            case_id = input("Enter Case ID to update: ")
+            new_status = input("Enter new status (In Review / Resolved): ")
+            db.update_case_status(case_id, new_status, user[0])
+            print("Case updated successfully.")
+
+    elif role == "Admin":
+        print("\n1. View All Cases")
+        choice = input("Enter your choice: ")
+        if choice == "1":
+            cases = db.fetch_cases("Admin")
+            print("All Cases:", cases)
