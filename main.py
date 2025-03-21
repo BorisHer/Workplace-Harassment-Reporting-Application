@@ -90,10 +90,16 @@ class AuthenticationSystem:
     def login(self, email, password):
         user = self.db.authenticate_user(email, password)
         if user:
-            print(f"Welcome, {user[1]} ({user[4]})!")
+            role = user[4]
+            if role == "Employee":
+                print(f"\nWelcome, {user[1]}! 🌟")
+                print("Your voice matters. If you have concerns, we're here to listen and support you.")
+                print("You can report a case, track your reports, and ensure your workplace remains safe and respectful.\n")
+            else:
+                print(f"Welcome, {user[1]} ({role})!\n")
             return user
         else:
-            print("Invalid credentials.")
+            print("Invalid credentials. Please try again.")
             return None
 
 # Main Execution
