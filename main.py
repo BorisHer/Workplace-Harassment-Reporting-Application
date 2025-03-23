@@ -103,7 +103,7 @@ class AuthenticationSystem:
             return None
 
 # Main Execution
-if _name_ == "_main_":
+if __name__ == "__main__":
     db = DatabaseManager()
     auth_system = AuthenticationSystem(db)
 
