@@ -17,5 +17,6 @@ A Python-based system to report, track, and manage workplace harassment cases.
 4. Run the application:
 
 ## Contributors
-- LINDO ELI
-- HERNANDEZ AND TADEJA
+- Hernandez, Boris
+- Lindo, Elizabeth
+- Tadeja, Jude
