@@ -1,7 +1,6 @@
 import sqlite3
 from datetime import datetime
 
-
 # Database Manager
 class DatabaseManager:
     def __init__(self, db_name="workplace_harassment.db"):
@@ -24,7 +23,6 @@ class DatabaseManager:
                     role TEXT NOT NULL CHECK(role IN ('Employee', 'HRPersonnel', 'Admin'))
                 )
             ''')
-
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS cases (
                     caseID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,12 +67,14 @@ class DatabaseManager:
         """Fetch cases based on role."""
         with self.connect() as conn:
             cursor = conn.cursor()
+            query = "SELECT * FROM cases"
+            params = ()
             if role == "HRPersonnel":
-                cursor.execute("SELECT * FROM cases WHERE status != 'Resolved'")
+                query += " WHERE status != 'Resolved'"
             elif role == "Employee":
-                cursor.execute("SELECT * FROM cases WHERE reporterID = ?", (user_id,))
-            elif role == "Admin":
-                cursor.execute("SELECT * FROM cases")
+                query += " WHERE reporterID = ?"
+                params = (user_id,)
+            cursor.execute(query, params)
             return cursor.fetchall()
 
     def update_case_status(self, case_id, new_status, hr_id):
@@ -82,7 +82,6 @@ class DatabaseManager:
         with self.connect() as conn:
             conn.execute("UPDATE cases SET status = ?, assignedHRID = ? WHERE caseID = ?", (new_status, hr_id, case_id))
             conn.commit()
-
 
 # Authentication System
 class AuthenticationSystem:
@@ -93,15 +92,35 @@ class AuthenticationSystem:
         user = self.db.authenticate_user(email, password)
         if user:
             role = user[4]
-            print(f"\nWelcome, {user[1]} ({role})!\n")
+            print(f"\n✅ Welcome, {user[1]} ({role})!\n")
             return user
         else:
-            print("Invalid credentials. Please try again.")
+            print("❌ Invalid credentials. Please try again.")
             return None
 
+# Utility Function
+def display_cases(cases):
+    """Formatted case display."""
+    if not cases:
+        print("No cases found.")
+        return
+    print("\n📂 Case List:")
+    print("=" * 50)
+    for case in cases:
+        print(f"🆔 Case ID: {case[0]} | Status: {case[4]}")
+        print(f"📝 Description: {case[3]}")
+        print(f"📅 Reported On: {case[5]}")
+        print("-" * 50)
 
 # Main Execution
 if __name__ == "__main__":
+    print("""
+    ==============================================
+    🏢 WORKPLACE HARASSMENT REPORTING SYSTEM 🏢
+    ==============================================
+    Welcome! Please log in to continue.
+    """)
+    
     db = DatabaseManager()
     auth_system = AuthenticationSystem(db)
 
@@ -109,82 +128,57 @@ if __name__ == "__main__":
         try:
             user = None
             while not user:
-                email = input("Enter your email: ").strip()
-                password = input("Enter your password: ").strip()
+                email = input("📧 Enter your email: ").strip()
+                password = input("🔑 Enter your password: ").strip()
                 user = auth_system.login(email, password)
-
-            role = user[4]  # Extract user role
+            role = user[4]
 
             while True:
                 try:
                     if role == "Employee":
-                        print("\n1. Report a Harassment Case\n2. View My Cases\n3. Logout")
-                        choice = input("Enter your choice: ").strip()
+                        print("\n1️⃣ Report a Harassment Case\n2️⃣ View My Cases\n3️⃣ Logout")
+                        choice = input("🔹 Enter your choice: ").strip()
                         if choice == "1":
-                            while True:
-                                description = input("Enter case description (or B to go back): ").strip()
-                                if description.lower() == "b":
-                                    break
-                                if description:
-                                    case_id = db.report_case(user[0], description)
-                                    print(f"Case #{case_id} reported successfully.")
-                                    break
-                                else:
-                                    print("Description cannot be empty.")
+                            description = input("📝 Enter case description: ").strip()
+                            if description:
+                                case_id = db.report_case(user[0], description)
+                                print(f"✅ Case #{case_id} reported successfully.")
                         elif choice == "2":
-                            cases = db.fetch_cases("Employee", user[0])
-                            print("Your Cases:")
-                            for case in cases:
-                                print(case)
+                            display_cases(db.fetch_cases("Employee", user[0]))
                         elif choice == "3":
-                            print("Logging out...")
+                            print("👋 Logging out...")
                             break
                         else:
-                            print("Invalid choice. Please enter a number between 1 and 3.")
+                            print("❌ Invalid choice. Try again.")
 
                     elif role == "HRPersonnel":
-                        print("\n1. View Cases\n2. Update Case Status\n3. Logout")
-                        choice = input("Enter your choice: ").strip()
+                        print("\n1️⃣ View Cases\n2️⃣ Update Case Status\n3️⃣ Logout")
+                        choice = input("🔹 Enter your choice: ").strip()
                         if choice == "1":
-                            cases = db.fetch_cases("HRPersonnel")
-                            print("Pending Cases:")
-                            for case in cases:
-                                print(case)
+                            display_cases(db.fetch_cases("HRPersonnel"))
                         elif choice == "2":
-                            while True:
-                                case_id = input("Enter Case ID to update (or B to go back): ").strip()
-                                if case_id.lower() == "b":
-                                    break
-                                if case_id.isdigit():
-                                    new_status = input("Enter new status (In Review / Resolved): ").strip()
-                                    if new_status in ["In Review", "Resolved"]:
-                                        db.update_case_status(case_id, new_status, user[0])
-                                        print("Case updated successfully.")
-                                        break
-                                    else:
-                                        print("Invalid status. Please enter 'In Review' or 'Resolved'.")
-                                else:
-                                    print("Invalid Case ID. Please enter a valid number.")
+                            case_id = input("🆔 Enter Case ID: ").strip()
+                            new_status = input("🔄 Enter new status (In Review / Resolved): ").strip()
+                            if new_status in ["In Review", "Resolved"]:
+                                db.update_case_status(case_id, new_status, user[0])
+                                print("✅ Case updated successfully.")
                         elif choice == "3":
-                            print("Logging out...")
+                            print("👋 Logging out...")
                             break
                         else:
-                            print("Invalid choice. Please enter a number between 1 and 3.")
+                            print("❌ Invalid choice. Try again.")
 
                     elif role == "Admin":
-                        print("\n1. View All Cases\n2. Logout")
-                        choice = input("Enter your choice: ").strip()
+                        print("\n1️⃣ View All Cases\n2️⃣ Logout")
+                        choice = input("🔹 Enter your choice: ").strip()
                         if choice == "1":
-                            cases = db.fetch_cases("Admin")
-                            print("All Cases:")
-                            for case in cases:
-                                print(case)
+                            display_cases(db.fetch_cases("Admin"))
                         elif choice == "2":
-                            print("Logging out...")
+                            print("👋 Logging out...")
                             break
                         else:
-                            print("Invalid choice. Please enter a valid number.")
+                            print("❌ Invalid choice. Try again.")
                 except Exception as e:
-                    print(f"An error occurred: {e}. Please try again.")
+                    print(f"⚠️ An error occurred: {e}")
         except Exception as e:
-            print(f"An error occurred: {e}. Please try again.")
+            print(f"⚠️ An error occurred: {e}")
