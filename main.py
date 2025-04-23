@@ -80,13 +80,28 @@ class DatabaseManager:
     def update_case_status(self, case_id, new_status, hr_id):
         """HR updates the case status."""
         with self.connect() as conn:
-            conn.execute("UPDATE cases SET status = ?, assignedHRID = ? WHERE caseID = ?", (new_status, hr_id, case_id))
+            conn.execute("UPDATE cases SET status = ?, assignedHRID = ? WHERE caseID = ?",
+                         (new_status, hr_id, case_id))
             conn.commit()
 
 # Authentication System
 class AuthenticationSystem:
     def __init__(self, db):
         self.db = db
+
+    def register(self):
+        print("\n📝 Register a New User")
+        name = input("👤 Full Name: ").strip()
+        email = input("📧 Email: ").strip()
+        password = input("🔑 Password: ").strip()
+        role = input("🎭 Role (Employee / HRPersonnel / Admin): ").strip()
+        if role not in ['Employee', 'HRPersonnel', 'Admin']:
+            print("❌ Invalid role.")
+            return
+        if self.db.add_user(name, email, password, role):
+            print("✅ Registration successful. You can now log in.")
+        else:
+            print("❌ Email already exists. Try with a different email.")
 
     def login(self, email, password):
         user = self.db.authenticate_user(email, password)
@@ -118,14 +133,22 @@ if __name__ == "__main__":
     ==============================================
     🏢 WORKPLACE HARASSMENT REPORTING SYSTEM 🏢
     ==============================================
-    Welcome! Please log in to continue.
     """)
-    
+
     db = DatabaseManager()
     auth_system = AuthenticationSystem(db)
 
     while True:
-        try:
+        print("\n🔸 Main Menu")
+        print("1️⃣ Register")
+        print("2️⃣ Login")
+        print("3️⃣ Exit")
+        choice = input("🔹 Enter your choice: ").strip()
+
+        if choice == "1":
+            auth_system.register()
+
+        elif choice == "2":
             user = None
             while not user:
                 email = input("📧 Enter your email: ").strip()
@@ -162,6 +185,8 @@ if __name__ == "__main__":
                             if new_status in ["In Review", "Resolved"]:
                                 db.update_case_status(case_id, new_status, user[0])
                                 print("✅ Case updated successfully.")
+                            else:
+                                print("❌ Invalid status entered.")
                         elif choice == "3":
                             print("👋 Logging out...")
                             break
@@ -180,5 +205,10 @@ if __name__ == "__main__":
                             print("❌ Invalid choice. Try again.")
                 except Exception as e:
                     print(f"⚠️ An error occurred: {e}")
-        except Exception as e:
-            print(f"⚠️ An error occurred: {e}")
+
+        elif choice == "3":
+            print("👋 Exiting the system. Goodbye!")
+            break
+
+        else:
+            print("❌ Invalid option. Please select from the menu.")
